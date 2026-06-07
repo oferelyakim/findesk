@@ -220,11 +220,12 @@ export default function CompanyTab() {
     staleTime: 60 * 1000,
   });
 
-  const { data: incomeRaw, isLoading: isLoadingIS, refetch: refetchIS } = useQuery({
+  const { data: incomeRaw, isLoading: isLoadingIS, error: errorIS, refetch: refetchIS } = useQuery({
     queryKey: ['income', ticker, period],
     queryFn: () => fetchIncomeStatements(ticker, period, 4),
     enabled: !!ticker,
     staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   const { data: balanceRaw, isLoading: isLoadingBS, refetch: refetchBS } = useQuery({
@@ -232,6 +233,7 @@ export default function CompanyTab() {
     queryFn: () => fetchBalanceSheets(ticker, period, 4),
     enabled: !!ticker,
     staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   const { data: metricsRaw, isLoading: isLoadingKM } = useQuery({
@@ -460,12 +462,37 @@ export default function CompanyTab() {
         </div>
       )}
 
+      {/* ── Error state ── */}
+      {ticker && !isLoading && errorIS && (
+        <div className="flex flex-col items-center justify-center py-16 text-center gap-3">
+          <div className="rounded-xl p-6 max-w-lg" style={{ background: 'var(--card)', border: '1px solid var(--red)' }}>
+            <p className="font-semibold mb-2" style={{ color: 'var(--red)' }}>Could not load data for {ticker}</p>
+            <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>{(errorIS as Error).message}</p>
+            <button onClick={() => { refetchIS(); refetchBS(); }} className="px-4 py-2 rounded-lg text-sm" style={{ background: 'var(--accent)', color: '#fff' }}>Retry</button>
+          </div>
+        </div>
+      )}
+
       {/* ── Empty state ── */}
       {!ticker && (
         <div className="flex flex-col items-center justify-center py-24 text-center">
           <Search size={40} style={{ color: 'var(--muted)' }} className="mb-4" />
           <h2 className="font-semibold text-lg mb-2">Search for a company</h2>
-          <p className="text-sm" style={{ color: 'var(--muted)' }}>Enter a ticker symbol or company name above to load financial statements</p>
+          <p className="text-sm max-w-sm" style={{ color: 'var(--muted)' }}>
+            Type a ticker or company name in the search box above — results appear as you type. Click a result to load the financial statements.
+          </p>
+          <div className="mt-6 flex gap-3 flex-wrap justify-center">
+            {['AAPL', 'MSFT', 'NVDA', 'AMZN', 'GOOGL'].map((sym) => (
+              <button
+                key={sym}
+                onClick={() => selectTicker(sym)}
+                className="px-3 py-1.5 rounded-lg text-sm font-medium"
+                style={{ background: 'var(--card)', border: '1px solid var(--border)', color: 'var(--accent)' }}
+              >
+                {sym}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 

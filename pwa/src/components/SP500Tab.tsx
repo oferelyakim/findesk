@@ -125,13 +125,14 @@ export default function SP500Tab() {
   const [chartMode, setChartMode] = useState<ChartMode>('delta');
   const [drillTarget, setDrillTarget] = useState<SP500Constituent | null>(null);
 
-  const { data: raw, isLoading, isFetching, refetch } = useQuery({
+  const { data: raw, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ['sp500-constituents'],
     queryFn: async () => {
       const raw = await fetchSP500Constituents();
       return computeWeightDeltas(raw);
     },
     staleTime: 5 * 60 * 1000,
+    retry: 1,
   });
 
   const constituents = raw ?? [];
@@ -227,6 +228,24 @@ export default function SP500Tab() {
         </div>
         <div className="h-72 rounded-xl skeleton" />
         <div className="h-64 rounded-xl skeleton" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="flex flex-col items-center justify-center py-24 text-center gap-4">
+        <div className="rounded-xl p-6 max-w-lg" style={{ background: 'var(--card)', border: '1px solid var(--red)' }}>
+          <p className="font-semibold mb-2" style={{ color: 'var(--red)' }}>Failed to load S&P 500 data</p>
+          <p className="text-sm mb-4" style={{ color: 'var(--muted)' }}>{(error as Error).message}</p>
+          <button
+            onClick={() => refetch()}
+            className="px-4 py-2 rounded-lg text-sm"
+            style={{ background: 'var(--accent)', color: '#fff' }}
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
