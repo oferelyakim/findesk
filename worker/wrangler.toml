@@ -11,6 +11,3 @@ id      = "97ce5a0958aa4a93a3b49233f1527e3c"
 #   wrangler secret put FMP_API_KEY
 #   wrangler secret put ALPACA_KEY_ID
 #   wrangler secret put ALPACA_SECRET_KEY
-
-[env.production]
-name = "findesk-worker-prod"
