@@ -164,6 +164,38 @@ async function handleSpyConstituents(env: Env, origin: string | null): Promise<R
   return jsonResponse(result, 200, origin);
 }
 
+// ── Company search (Yahoo Finance — free, no auth) ────────────────────────────
+
+async function handleSearch(query: string, env: Env, origin: string | null): Promise<Response> {
+  if (!query.trim()) return jsonResponse([], 200, origin);
+  const cacheKey = `search:${query.toLowerCase()}`;
+  const cached = await env.FINDESK_CACHE.get(cacheKey, 'json');
+  if (cached) return jsonResponse(cached, 200, origin);
+
+  const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&listsCount=0`;
+  const res = await fetch(url, {
+    headers: { 'User-Agent': 'Mozilla/5.0 (compatible; FinDesk/1.0)' },
+  });
+  if (!res.ok) throw new Error(`Yahoo search failed: HTTP ${res.status}`);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const data = await res.json() as any;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const quotes: unknown[] = (data?.quotes ?? []).filter((q: any) =>
+    q.quoteType === 'EQUITY' && q.symbol && !q.symbol.includes('.')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ).map((q: any) => ({
+    symbol:            q.symbol,
+    name:              q.shortname ?? q.longname ?? q.symbol,
+    exchangeShortName: q.exchDisp ?? q.exchange ?? '',
+    exchange:          q.exchDisp ?? '',
+    type:              'stock',
+  }));
+
+  await env.FINDESK_CACHE.put(cacheKey, JSON.stringify(quotes), { expirationTtl: 300 });
+  return jsonResponse(quotes, 200, origin);
+}
+
 // ── FMP proxy (requires Starter+ plan for index/constituent endpoints) ─────────
 
 async function handleFMP(path: string, searchParams: URLSearchParams, env: Env): Promise<unknown> {
@@ -218,6 +250,12 @@ export default {
       // SPY holdings (free — SSGA daily XLSX)
       if (path === '/api/spy/constituents') {
         return await handleSpyConstituents(env, origin);
+      }
+
+      // Company search (Yahoo Finance — free)
+      if (path === '/api/search') {
+        const query = url.searchParams.get('query') ?? '';
+        return await handleSearch(query, env, origin);
       }
 
       // FMP proxy (free tier: fundamentals/search; premium: index constituents)

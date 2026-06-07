@@ -369,10 +369,17 @@ export default function CompanyTab() {
           <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--muted)' }} />
           <input
             type="text"
-            placeholder="Search company or ticker (e.g. AAPL, Apple)"
+            placeholder="Type ticker or company name, then pick a result or press Enter"
             value={searchQuery}
             onChange={(e) => { setSearchQuery(e.target.value); setShowResults(true); }}
             onFocus={() => setShowResults(true)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const sym = searchQuery.trim().toUpperCase();
+                if (sym) selectTicker(sym);
+              }
+              if (e.key === 'Escape') setShowResults(false);
+            }}
             className="pl-9 py-2.5 text-sm w-full"
           />
           {showResults && searchResults && searchResults.length > 0 && (

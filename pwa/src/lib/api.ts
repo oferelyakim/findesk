@@ -31,18 +31,17 @@ export async function fetchSP500Constituents(): Promise<SP500Constituent[]> {
   return workerFetch<SP500Constituent[]>('/api/spy/constituents');
 }
 
-// ── Company search ─────────────────────────────────────────────────────────────
+// ── Company search (Yahoo Finance via Worker — free) ───────────────────────────
+// FMP alternative (uncomment if upgrading to Starter+ plan):
+// export async function searchCompanies(query: string): Promise<SearchResult[]> {
+//   if (!query.trim()) return [];
+//   const data = await workerFetch<any[]>(`/api/fmp/search-ticker?query=${encodeURIComponent(query)}&limit=10`);
+//   return data.map((r: any) => ({ symbol: r.symbol ?? '', name: r.name ?? '',
+//     exchangeShortName: r.exchangeShortName ?? '', exchange: r.exchangeShortName ?? '', type: r.type ?? 'stock' }));
+// }
 export async function searchCompanies(query: string): Promise<SearchResult[]> {
   if (!query.trim()) return [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await workerFetch<any[]>(`/api/fmp/search-ticker?query=${encodeURIComponent(query)}&limit=10`);
-  return data.map((r) => ({
-    symbol: r.symbol ?? '',
-    name:   r.name ?? '',
-    exchangeShortName: r.exchangeShortName ?? '',
-    exchange: r.exchangeShortName ?? '',
-    type: r.type ?? 'stock',
-  }));
+  return workerFetch<SearchResult[]>(`/api/search?query=${encodeURIComponent(query)}`);
 }
 
 // ── Income statement ───────────────────────────────────────────────────────────
