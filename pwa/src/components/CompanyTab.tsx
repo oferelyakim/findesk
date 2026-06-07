@@ -142,8 +142,8 @@ function FinTable({ rows, periods, revenueKey, periodLabel }: FinTableProps) {
                   {isSubtotal ? label : <span className="pl-2">{label}</span>}
                 </td>
                 {periods.map((p) => {
-                  const val = (p as Record<string, unknown>)[key] as CellVal;
-                  const rev = revenueKey ? (p as Record<string, unknown>)[revenueKey] as CellVal : null;
+                  const val = (p as unknown as Record<string, unknown>)[key] as CellVal;
+                  const rev = revenueKey ? (p as unknown as Record<string, unknown>)[revenueKey] as CellVal : null;
                   return (
                     <>
                       <td key={`${p.date}-$`} className="px-3 py-2 text-right">{dollarCell(val)}</td>
@@ -303,7 +303,7 @@ export default function CompanyTab() {
     const isRows = IS_ROWS.map(({ label, key }) => {
       const row: Record<string, unknown> = { 'Line Item': label };
       incomeStatements.forEach((s) => {
-        row[s.date.slice(0, 4)] = (s as Record<string, unknown>)[key] ?? null;
+        row[s.date.slice(0, 4)] = (s as unknown as Record<string, unknown>)[key] ?? null;
       });
       return row;
     });
@@ -312,7 +312,7 @@ export default function CompanyTab() {
     const bsRows = BS_ROWS.map(({ label, key }) => {
       const row: Record<string, unknown> = { 'Line Item': label };
       balanceSheets.forEach((s) => {
-        row[s.date.slice(0, 4)] = (s as Record<string, unknown>)[key] ?? null;
+        row[s.date.slice(0, 4)] = (s as unknown as Record<string, unknown>)[key] ?? null;
       });
       return row;
     });
