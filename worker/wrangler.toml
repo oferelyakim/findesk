@@ -1,0 +1,16 @@
+name            = "findesk-worker"
+main            = "src/index.ts"
+compatibility_date = "2024-01-01"
+workers_dev     = true
+
+[[kv_namespaces]]
+binding = "FINDESK_CACHE"
+id      = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# Secrets are set via `wrangler secret put`, not stored here:
+#   wrangler secret put FMP_API_KEY
+#   wrangler secret put ALPACA_KEY_ID
+#   wrangler secret put ALPACA_SECRET_KEY
+
+[env.production]
+name = "findesk-worker-prod"
