@@ -13,22 +13,22 @@ async function workerFetch<T>(path: string): Promise<T> {
   return res.json() as Promise<T>;
 }
 
-// ── S&P 500 ────────────────────────────────────────────────────────────────────
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-function mapConstituent(raw: any): SP500Constituent {
-  return {
-    symbol: raw.symbol ?? raw.ticker ?? '',
-    name:   raw.name ?? raw.companyName ?? '',
-    weight: typeof raw.weight === 'number' ? raw.weight : 0,
-    price:  typeof raw.price === 'number' ? raw.price : 0,
-    changesPercentage: typeof raw.changesPercentage === 'number' ? raw.changesPercentage : 0,
-  };
-}
+// ── S&P 500 / SPY constituents ────────────────────────────────────────────────
+// Source: SSGA SPY daily holdings XLSX (free, no auth required)
+// The Worker fetches the file, parses weights, computes delta-bps vs yesterday's KV snapshot.
+//
+// FMP premium alternative (uncomment + comment out the free call below if you upgrade to Starter+):
+// export async function fetchSP500Constituents(): Promise<SP500Constituent[]> {
+//   const data = await workerFetch<any[]>('/api/fmp/sp500_constituent');
+//   return data.map((raw: any) => ({
+//     symbol: raw.symbol ?? '', name: raw.name ?? '',
+//     weight: raw.weight ?? 0, price: raw.price ?? 0,
+//     changesPercentage: raw.changesPercentage ?? 0,
+//   }));
+// }
 
 export async function fetchSP500Constituents(): Promise<SP500Constituent[]> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const data = await workerFetch<any[]>('/api/fmp/sp500_constituent');
-  return data.map(mapConstituent);
+  return workerFetch<SP500Constituent[]>('/api/spy/constituents');
 }
 
 // ── Company search ─────────────────────────────────────────────────────────────
