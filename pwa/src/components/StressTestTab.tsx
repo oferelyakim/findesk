@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
-import { AlertTriangle, Save, ChevronRight, RefreshCw } from 'lucide-react';
-import { computeStressTest, fmtMillions, fmtPct } from '@/lib/calculations';
+import { Save, RefreshCw } from 'lucide-react';
+import { computeStressTest, fmtMillions } from '@/lib/calculations';
 import { saveStressTest } from '@/lib/supabase';
 import { useFinDeskStore } from '@/store';
 import { LabelWithTip } from '@/components/Tooltip';
@@ -121,7 +121,7 @@ const DEFAULT_ASSUMPTIONS: StressAssumptions = {
 // ── Main ──────────────────────────────────────────────────────────────────────
 
 export default function StressTestTab() {
-  const { stressBaseFromAnalysis, lastAnalysis } = useFinDeskStore();
+  const { stressBaseFromAnalysis } = useFinDeskStore();
   const [base, setBase]              = useState<StressBaseInputs>(stressBaseFromAnalysis ?? DEFAULT_BASE);
   const [assumptions, setAssumptions] = useState<StressAssumptions>(DEFAULT_ASSUMPTIONS);
   const [saving, setSaving]          = useState(false);

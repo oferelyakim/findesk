@@ -3,11 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import {
   LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip as ReTooltip, Legend, ResponsiveContainer,
 } from 'recharts';
-import { Search, RefreshCw, Download, Save, ChevronDown, ChevronUp } from 'lucide-react';
+import { Search, RefreshCw, Download, Save } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { searchCompanies, fetchIncomeStatements, fetchBalanceSheets, fetchKeyMetrics } from '@/lib/api';
 import {
-  mapIncomeStatement, mapBalanceSheet,
   commonSizePct, fmtMillions, fmtPct,
 } from '@/lib/calculations';
 import { saveAnalysis } from '@/lib/supabase';
@@ -25,15 +24,6 @@ function useDebouncedValue<T>(value: T, ms: number): T {
   }, [value, ms]);
 
   return debouncedValue;
-}
-
-function SectionHeader({ children }: { children: React.ReactNode }) {
-  return (
-    <div className="text-xs font-semibold uppercase tracking-wider px-3 py-2"
-      style={{ color: 'var(--muted)', background: 'var(--surface)', borderBottom: '1px solid var(--border)' }}>
-      {children}
-    </div>
-  );
 }
 
 type CellVal = number | null | undefined;
@@ -80,18 +70,18 @@ const IS_ROWS: { label: string; key: keyof IncomeStatement; separator?: boolean 
 ];
 
 const BS_ROWS: { label: string; key: keyof BalanceSheet; isSubtotal?: boolean }[] = [
-  { label: 'Cash & Equivalents', key: 'cashAndCashEquivalents' },
+  { label: 'Cash & Equivalents', key: 'cashAndEquivalents' },
   { label: 'Short-Term Investments', key: 'shortTermInvestments' },
   { label: 'Accounts Receivable', key: 'netReceivables' },
   { label: 'Inventory', key: 'inventory' },
-  { label: 'Total Current Assets', key: 'totalCurrentAssets', isSubtotal: true },
+  { label: 'Total Current Assets', key: 'currentAssets', isSubtotal: true },
   { label: 'PP&E (net)', key: 'propertyPlantEquipmentNet' },
   { label: 'Goodwill', key: 'goodwill' },
   { label: 'Intangible Assets', key: 'intangibleAssets' },
   { label: 'Total Assets', key: 'totalAssets', isSubtotal: true },
   { label: 'Accounts Payable', key: 'accountPayables' },
   { label: 'Short-Term Debt', key: 'shortTermDebt' },
-  { label: 'Total Current Liabilities', key: 'totalCurrentLiabilities', isSubtotal: true },
+  { label: 'Total Current Liabilities', key: 'currentLiabilities', isSubtotal: true },
   { label: 'Long-Term Debt', key: 'longTermDebt' },
   { label: 'Total Debt', key: 'totalDebt', isSubtotal: true },
   { label: 'Total Equity', key: 'totalStockholdersEquity', isSubtotal: true },
@@ -214,7 +204,7 @@ function MarginChart({ statements }: { statements: IncomeStatement[] }) {
 export default function CompanyTab() {
   const [searchQuery, setSearchQuery] = useState('');
   const [ticker, setTicker] = useState('');
-  const [period, setPeriod] = useState<'annual' | 'quarter'>('annual');
+  const [period, setPeriod] = useState<'annual' | 'quarterly'>('annual');
   const [showResults, setShowResults] = useState(false);
   const [saving, setSaving] = useState(false);
   const [saveNote, setSaveNote] = useState('');
@@ -251,20 +241,12 @@ export default function CompanyTab() {
     staleTime: 5 * 60 * 1000,
   });
 
-  const incomeStatements: IncomeStatement[] = useMemo(
-    () => (incomeRaw ? Object.entries(incomeRaw).map(([date, raw]) => mapIncomeStatement({ ...raw as object, date }, period)) : []),
-    [incomeRaw, period]
-  );
-
-  const balanceSheets: BalanceSheet[] = useMemo(
-    () => (balanceRaw ? Object.entries(balanceRaw).map(([date, raw]) => mapBalanceSheet({ ...raw as object, date }, period)) : []),
-    [balanceRaw, period]
-  );
+  const incomeStatements: IncomeStatement[] = useMemo(() => incomeRaw ?? [], [incomeRaw]);
+  const balanceSheets: BalanceSheet[]       = useMemo(() => balanceRaw ?? [], [balanceRaw]);
 
   const latestMetrics: KeyMetrics | null = useMemo(() => {
-    if (!metricsRaw) return null;
-    const entries = Object.values(metricsRaw);
-    return entries[0] as KeyMetrics ?? null;
+    if (!metricsRaw?.length) return null;
+    return metricsRaw[0] ?? null;
   }, [metricsRaw]);
 
   const isLoading = isLoadingIS || isLoadingBS || isLoadingKM;
@@ -298,7 +280,7 @@ export default function CompanyTab() {
           ebitda: latest.ebitda ?? 0,
           interestExpense: latest.interestExpense ?? 0,
           totalDebt: latestBS.totalDebt ?? 0,
-          cashAndEquivalents: latestBS.cashAndCashEquivalents ?? 0,
+          cashAndEquivalents: latestBS.cashAndEquivalents ?? 0,
           accountsReceivable: latestBS.netReceivables ?? 0,
           inventory: latestBS.inventory ?? 0,
           accountsPayable: latestBS.accountPayables ?? 0,
@@ -414,7 +396,7 @@ export default function CompanyTab() {
         </div>
 
         <div className="flex rounded-lg overflow-hidden" style={{ border: '1px solid var(--border)' }}>
-          {(['annual', 'quarter'] as const).map((p) => (
+          {(['annual', 'quarterly'] as const).map((p) => (
             <button
               key={p}
               onClick={() => setPeriod(p)}

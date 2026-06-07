@@ -66,7 +66,7 @@ export default function SavedTab() {
         ebitda: latest.ebitda ?? 0,
         interestExpense: latest.interestExpense ?? 0,
         totalDebt: latestBS.totalDebt ?? 0,
-        cashAndEquivalents: latestBS.cashAndCashEquivalents ?? 0,
+        cashAndEquivalents: latestBS.cashAndEquivalents ?? 0,
         accountsReceivable: latestBS.netReceivables ?? 0,
         inventory: latestBS.inventory ?? 0,
         accountsPayable: latestBS.accountPayables ?? 0,

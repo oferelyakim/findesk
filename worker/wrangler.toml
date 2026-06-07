@@ -5,7 +5,7 @@ workers_dev     = true
 
 [[kv_namespaces]]
 binding = "FINDESK_CACHE"
-id      = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id      = "97ce5a0958aa4a93a3b49233f1527e3c"
 
 # Secrets are set via `wrangler secret put`, not stored here:
 #   wrangler secret put FMP_API_KEY

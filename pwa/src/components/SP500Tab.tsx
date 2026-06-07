@@ -2,12 +2,12 @@ import { useState, useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip as ReTooltip, ResponsiveContainer,
-  LineChart, Line, CartesianGrid, Legend,
+  LineChart, Line, CartesianGrid,
 } from 'recharts';
-import { RefreshCw, Download, X, TrendingUp, TrendingDown, Activity, Search } from 'lucide-react';
+import { RefreshCw, Download, X, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { fetchSP500Constituents, fetchHistoricalPrices, daysAgo, today } from '@/lib/api';
-import { computeWeightDeltas, fmtPct, fmtMillions } from '@/lib/calculations';
+import { computeWeightDeltas, fmtPct } from '@/lib/calculations';
 import type { SP500Constituent } from '@/types';
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -46,7 +46,7 @@ function DrillModal({ constituent, onClose }: { constituent: SP500Constituent; o
     if (!prices) return [];
     return Object.entries(prices)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, bar]) => ({ date: date.slice(5), close: (bar as { c: number }).c }));
+      .map(([date, bar]) => ({ date: date.slice(5), close: bar.c }));
   }, [prices]);
 
   return (
@@ -119,7 +119,7 @@ function DrillModal({ constituent, onClose }: { constituent: SP500Constituent; o
 type ChartMode = 'delta' | 'price1d' | 'weight';
 
 export default function SP500Tab() {
-  const [sortBy, setSortBy] = useState<keyof SP500Constituent | 'weightDeltaBps'>('weightDeltaBps');
+  const [sortBy, setSortBy] = useState<keyof SP500Constituent>('weightDeltaBps');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [search, setSearch] = useState('');
   const [chartMode, setChartMode] = useState<ChartMode>('delta');
@@ -179,14 +179,14 @@ export default function SP500Tab() {
       c.name.toLowerCase().includes(search.toLowerCase())
     );
     rows = [...rows].sort((a, b) => {
-      const av = (a as Record<string, unknown>)[sortBy] as number ?? 0;
-      const bv = (b as Record<string, unknown>)[sortBy] as number ?? 0;
+      const av = (a[sortBy] as number | undefined) ?? 0;
+      const bv = (b[sortBy] as number | undefined) ?? 0;
       return sortDir === 'desc' ? bv - av : av - bv;
     });
     return rows;
   }, [constituents, search, sortBy, sortDir]);
 
-  const handleSort = (col: typeof sortBy) => {
+  const handleSort = (col: keyof SP500Constituent) => {
     if (col === sortBy) setSortDir((d) => (d === 'desc' ? 'asc' : 'desc'));
     else { setSortBy(col); setSortDir('desc'); }
   };
@@ -205,7 +205,7 @@ export default function SP500Tab() {
     XLSX.writeFile(wb, 'sp500-weight-changes.xlsx');
   };
 
-  const thStyle = (col: typeof sortBy) => ({
+  const thStyle = (col: keyof SP500Constituent) => ({
     cursor: 'pointer',
     userSelect: 'none' as const,
     color: sortBy === col ? 'var(--accent)' : 'var(--muted)',

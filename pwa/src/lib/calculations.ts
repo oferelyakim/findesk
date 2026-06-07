@@ -3,6 +3,7 @@ import type {
   StressBaseInputs,
   StressAssumptions,
   StressResult,
+  StressScenario,
   IncomeStatement,
   BalanceSheet,
 } from '@/types';
@@ -12,14 +13,14 @@ export function fmtMillions(value: number | null | undefined): string {
   if (value === null || value === undefined) return '—';
   const abs = Math.abs(value);
   const sign = value < 0 ? '(' : '';
-  const end = value < 0 ? ')' : '';
+  const end  = value < 0 ? ')' : '';
   if (abs >= 1000) return `${sign}$${(abs / 1000).toFixed(1)}B${end}`;
   return `${sign}$${abs.toFixed(0)}M${end}`;
 }
 
 export function fmtPct(value: number | null | undefined, decimals = 1): string {
   if (value === null || value === undefined) return '—';
-  return `${value.toFixed(decimals)}%`;
+  return `${(value * 100).toFixed(decimals)}%`;
 }
 
 export function fmtNumber(value: number | null | undefined, decimals = 2): string {
@@ -37,28 +38,21 @@ export function commonSizePct(
 }
 
 // ── Weight delta (S&P 500) ─────────────────────────────────────────────────────
-/**
- * Computes daily weight delta in basis points for each constituent.
- * Formula: w_prev × (r_stock − r_index) / (1 + r_index) × 10,000
- * r_index = weighted average of all constituent 1-day returns.
- */
 export function computeWeightDeltas(
   constituents: SP500Constituent[],
 ): SP500Constituent[] {
-  // Estimated index return = weighted average of 1-day changes
   const rIndex = constituents.reduce(
-    (sum, c) => sum + (c.weightPct / 100) * (c.change1dPct / 100),
+    (sum, c) => sum + (c.weight / 100) * (c.changesPercentage / 100),
     0,
   );
 
   return constituents.map((c) => {
-    const rStock = c.change1dPct / 100;
-    const wDeltaBps =
-      (c.weightPct * (rStock - rIndex)) / (1 + rIndex) * 100; // bps
+    const rStock   = c.changesPercentage / 100;
+    const wDeltaBps = (c.weight * (rStock - rIndex)) / (1 + rIndex) * 100;
     return {
       ...c,
       weightDeltaBps: parseFloat(wDeltaBps.toFixed(3)),
-      weightPrev: parseFloat((c.weightPct - wDeltaBps / 100).toFixed(4)),
+      weightPrev: parseFloat((c.weight - wDeltaBps / 100).toFixed(4)),
     };
   });
 }
@@ -68,85 +62,67 @@ export function computeStressTest(
   base: StressBaseInputs,
   assumptions: StressAssumptions,
 ): StressResult {
-  const salesDecimally = assumptions.salesDeclinePct / 100;
-  const stressedSales = base.sales * (1 - salesDecimally);
-  const stressedGrossProfit = stressedSales * (assumptions.stressedGpmPct / 100);
-  const stressedGpmPct = assumptions.stressedGpmPct;
-  const cogsDelta = base.ebitda - (base.grossProfit - base.da); // approx SG&A
-  const stressedEbitda = stressedGrossProfit - (base.sales - base.grossProfit) * 0 - cogsDelta;
-  // Simpler: stressed EBITDA = stressed GP - (base SGA) where SGA ≈ base GP - base EBITDA - base DA
-  const baseSga = base.grossProfit - base.ebitda - base.da;
-  const cleanStressedEbitda = stressedGrossProfit - baseSga;
-  const stressedEbitdaPct = stressedSales > 0 ? (cleanStressedEbitda / stressedSales) * 100 : 0;
-  const ebitdar = cleanStressedEbitda + base.rentalExpense;
+  // ── Base scenario ──
+  const baseFcf = base.ebitda - base.interestExpense - base.capex;
+  const baseCoverage = base.interestExpense > 0 ? base.ebitda / base.interestExpense : null;
+  const baseDebtEbitda = base.ebitda > 0 ? base.totalDebt / base.ebitda : null;
+  const baseEligibleAR = base.accountsReceivable * (1 - assumptions.arIneligiblesPct / 100);
+  const baseEligibleInv = base.inventory * (assumptions.inventoryQualityCapPct / 100);
+  const baseBBNet = base.cashAndEquivalents + baseEligibleAR + baseEligibleInv - base.accountsPayable;
 
-  // Interest adjusts for rate increase
-  const stressedInterest = base.interestExpense * (1 + assumptions.interestRateIncreasePct / 100);
-
-  // Cashflow coverage = EBITDA / (CPLTD + Interest)
-  const cpltdPlusInterest = base.cpltd + stressedInterest;
-  const cashflowCoverageMultiple =
-    cpltdPlusInterest > 0 ? cleanStressedEbitda / cpltdPlusInterest : 0;
-
-  // Free cash flow under stress
-  const taxRate = base.sales > 0 ? base.incomeTax / base.sales : 0.25;
-  const stressedTax = Math.max(0, (cleanStressedEbitda - base.da - stressedInterest) * taxRate);
-  const stressedFcf =
-    cleanStressedEbitda - base.da - stressedInterest - base.cpltd - base.capex - stressedTax - base.dividends;
-
-  // Borrowing base components
-  const eligibleAR = base.accountsReceivable * (1 - assumptions.arIneligiblesPct / 100);
-  // Inventory slowdown increases inventory balance, quality cap limits eligibility
-  const inventorySlowdownFactor = 1 + assumptions.inventorySlowdownMonths / 12;
-  const stressedInventory = base.inventory * inventorySlowdownFactor;
-  const eligibleInventory = stressedInventory * (assumptions.inventoryQualityCapPct / 100);
-  const eligibleCash = base.cash;
-
-  // Adjusted Funded Debt = Funded Debt − Cash − eligible AR − eligible Inventory + Payables
-  const adjustedFundedDebt =
-    base.fundedDebt - eligibleCash - eligibleAR - eligibleInventory + base.payables;
-
-  const adjFundedDebtToEbitda =
-    cleanStressedEbitda !== 0 ? adjustedFundedDebt / cleanStressedEbitda : 0;
-  const fcfPlusCpltd = stressedFcf + base.cpltd;
-  const adjFundedDebtToFcfPlusCpltd =
-    fcfPlusCpltd !== 0 ? adjustedFundedDebt / fcfPlusCpltd : 0;
-
-  return {
-    stressedSales,
-    stressedGrossProfit,
-    stressedGpmPct,
-    stressedEbitda: cleanStressedEbitda,
-    stressedEbitdaPct,
-    ebitdar,
-    cpltd: base.cpltd,
-    interest: stressedInterest,
-    capex: base.capex,
-    incomeTax: stressedTax,
-    dividends: base.dividends,
-    rentalExpense: base.rentalExpense,
-    cashflowCoverageMultiple,
-    freeCashFlow: stressedFcf,
-    eligibleCash,
-    eligibleAR,
-    eligibleInventory,
-    payables: base.payables,
-    adjustedFundedDebt,
-    adjFundedDebtToEbitda,
-    adjFundedDebtToFcfPlusCpltd,
+  const baseScenario: StressScenario = {
+    revenue:   base.revenue,
+    grossProfit: base.grossProfit,
+    ebitda:    base.ebitda,
+    interestExpense: base.interestExpense,
+    freeCashFlow: baseFcf,
+    cashflowCoverageMultiple: baseCoverage,
+    adjFundedDebtToEbitda: baseDebtEbitda,
+    borrowingBase: {
+      cash: base.cashAndEquivalents,
+      eligibleAR: baseEligibleAR,
+      eligibleInventory: baseEligibleInv,
+      payables: base.accountsPayable,
+      net: baseBBNet,
+    },
   };
-}
 
-// ── Derived balance sheet metrics ──────────────────────────────────────────────
-export function tangibleNetWorth(bs: BalanceSheet): number | null {
-  if (bs.totalEquity === null) return null;
-  const gw = bs.goodwillAndIntangibles ?? 0;
-  return bs.totalEquity - gw;
-}
+  // ── Stressed scenario ──
+  const stressedRevenue = base.revenue * (1 - assumptions.salesDeclinePct / 100);
+  const baseGpm = base.revenue > 0 ? base.grossProfit / base.revenue : 0;
+  const stressedGpm = baseGpm - assumptions.grossMarginCompressionPct / 100;
+  const stressedGrossProfit = stressedRevenue * stressedGpm;
+  // SGA ≈ grossProfit - ebitda (simplification)
+  const baseSga = base.grossProfit - base.ebitda;
+  const stressedEbitda = stressedGrossProfit - baseSga;
+  const stressedInterest = base.interestExpense * (1 + assumptions.interestRateIncreasePct / 100);
+  const stressedFcf = stressedEbitda - stressedInterest - base.capex;
+  const stressedCoverage = stressedInterest > 0 ? stressedEbitda / stressedInterest : null;
+  const stressedDebtEbitda = stressedEbitda > 0 ? base.totalDebt / stressedEbitda : null;
 
-export function bookLeverage(bs: BalanceSheet): number | null {
-  if (bs.totalDebt === null || bs.totalEquity === null || bs.totalEquity === 0) return null;
-  return bs.totalDebt / bs.totalEquity;
+  const stressedEligibleAR = base.accountsReceivable * (1 - assumptions.arIneligiblesPct / 100);
+  const stressedInvBalance = base.inventory * (1 + assumptions.inventorySlowdownPct / 100);
+  const stressedEligibleInv = stressedInvBalance * (assumptions.inventoryQualityCapPct / 100);
+  const stressedBBNet = base.cashAndEquivalents + stressedEligibleAR + stressedEligibleInv - base.accountsPayable;
+
+  const stressedScenario: StressScenario = {
+    revenue: stressedRevenue,
+    grossProfit: stressedGrossProfit,
+    ebitda: stressedEbitda,
+    interestExpense: stressedInterest,
+    freeCashFlow: stressedFcf,
+    cashflowCoverageMultiple: stressedCoverage,
+    adjFundedDebtToEbitda: stressedDebtEbitda,
+    borrowingBase: {
+      cash: base.cashAndEquivalents,
+      eligibleAR: stressedEligibleAR,
+      eligibleInventory: stressedEligibleInv,
+      payables: base.accountsPayable,
+      net: stressedBBNet,
+    },
+  };
+
+  return { base: baseScenario, stressed: stressedScenario };
 }
 
 // ── Color helpers ──────────────────────────────────────────────────────────────
@@ -156,7 +132,6 @@ export function marginColor(pct: number | null): ColorLevel {
   if (pct === null) return 'neutral';
   if (pct > 30) return 'green';
   if (pct > 10) return 'amber';
-  if (pct >= 0) return 'red';
   return 'red';
 }
 
@@ -175,29 +150,25 @@ export function leverageColor(ratio: number): ColorLevel {
 // ── Data mappers (FMP API response → internal types) ──────────────────────────
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function mapIncomeStatement(raw: any, type: 'annual' | 'quarterly'): IncomeStatement {
-  const n = (v: unknown) => (typeof v === 'number' ? v / 1e6 : null); // raw → $M
+  const n = (v: unknown) => (typeof v === 'number' ? v / 1e6 : null);
   return {
-    period: {
-      label: type === 'annual' ? `FY${raw.calendarYear}` : `${raw.period} ${raw.calendarYear}`,
-      end: raw.date ?? '',
-      type,
-    },
-    revenue: n(raw.revenue),
+    date: raw.date ?? '',
+    period: type,
+    revenue:    n(raw.revenue),
     costOfRevenue: n(raw.costOfRevenue),
     grossProfit: n(raw.grossProfit),
     researchAndDevelopment: n(raw.researchAndDevelopmentExpenses),
-    sellingGeneralAdmin: n(raw.sellingGeneralAndAdministrativeExpenses),
+    researchAndDevelopmentExpenses: n(raw.researchAndDevelopmentExpenses),
+    sellingGeneralAdministrativeExpenses: n(raw.sellingGeneralAndAdministrativeExpenses),
     operatingIncome: n(raw.operatingIncome),
     depreciationAmortization: n(raw.depreciationAndAmortization),
+    depreciationAndAmortization: n(raw.depreciationAndAmortization),
     ebitda: n(raw.ebitda),
     interestExpense: n(raw.interestExpense),
-    preTaxIncome: n(raw.incomeBeforeTax),
-    incomeTax: n(raw.incomeTaxExpense),
+    incomeBeforeTax: n(raw.incomeBeforeTax),
+    incomeTaxExpense: n(raw.incomeTaxExpense),
     netIncome: n(raw.netIncome),
-    operatingCashFlow: null, // from cash flow statement
-    capitalExpenditure: null,
-    freeCashFlow: null,
-    dividendsPaid: null,
+    epsDiluted: typeof raw.epsdiluted === 'number' ? raw.epsdiluted : (typeof raw.epsDiluted === 'number' ? raw.epsDiluted : null),
   };
 }
 
@@ -205,20 +176,35 @@ export function mapIncomeStatement(raw: any, type: 'annual' | 'quarterly'): Inco
 export function mapBalanceSheet(raw: any, type: 'annual' | 'quarterly'): BalanceSheet {
   const n = (v: unknown) => (typeof v === 'number' ? v / 1e6 : null);
   return {
-    period: {
-      label: type === 'annual' ? `FY${raw.calendarYear}` : `${raw.period} ${raw.calendarYear}`,
-      end: raw.date ?? '',
-      type,
-    },
-    cashAndEquivalents: n(raw.cashAndCashEquivalents),
-    currentAssets: n(raw.totalCurrentAssets),
-    currentLiabilities: n(raw.totalCurrentLiabilities),
-    totalAssets: n(raw.totalAssets),
-    totalLiabilities: n(raw.totalLiabilities),
-    totalDebt: n(raw.totalDebt),
-    goodwillAndIntangibles: n(
-      ((raw.goodwill ?? 0) + (raw.intangibleAssets ?? 0)) as number,
-    ),
-    totalEquity: n(raw.totalStockholdersEquity),
+    date: raw.date ?? '',
+    period: type,
+    cashAndEquivalents:     n(raw.cashAndCashEquivalents),
+    shortTermInvestments:   n(raw.shortTermInvestments),
+    netReceivables:         n(raw.netReceivables),
+    inventory:              n(raw.inventory),
+    currentAssets:          n(raw.totalCurrentAssets),
+    propertyPlantEquipmentNet: n(raw.propertyPlantEquipmentNet),
+    goodwill:               n(raw.goodwill),
+    intangibleAssets:       n(raw.intangibleAssets),
+    totalAssets:            n(raw.totalAssets),
+    accountPayables:        n(raw.accountPayables),
+    shortTermDebt:          n(raw.shortTermDebt),
+    currentLiabilities:     n(raw.totalCurrentLiabilities),
+    longTermDebt:           n(raw.longTermDebt),
+    totalDebt:              n(raw.totalDebt),
+    totalStockholdersEquity: n(raw.totalStockholdersEquity),
+    totalEquity:            n(raw.totalStockholdersEquity),
   };
+}
+
+// ── Derived metrics ────────────────────────────────────────────────────────────
+export function tangibleNetWorth(bs: BalanceSheet): number | null {
+  if (bs.totalEquity === null) return null;
+  const gw = (bs.goodwill ?? 0) + (bs.intangibleAssets ?? 0);
+  return bs.totalEquity - gw;
+}
+
+export function bookLeverage(bs: BalanceSheet): number | null {
+  if (bs.totalDebt === null || bs.totalEquity === null || bs.totalEquity === 0) return null;
+  return bs.totalDebt / bs.totalEquity;
 }
